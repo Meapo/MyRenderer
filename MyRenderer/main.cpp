@@ -165,12 +165,10 @@ int main(int argc, char** argv) {
 	else {
 		lFileName = "obj/morphling_econ.fbx";
 	}
-
+	Model model(lFileName);
 	
 	return 0;
 
-
-	return 0;
 }
 #pragma endregion
 

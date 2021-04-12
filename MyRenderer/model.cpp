@@ -4,7 +4,6 @@
 #include <sstream>
 #include <vector>
 #include "model.h"
-#include <fbxsdk.h>
 
 std::string getFileExtension(const char* filename) {
     int pointInd = 0, chInd = 0;
@@ -17,77 +16,89 @@ std::string getFileExtension(const char* filename) {
     return extesion;
 }
 
-void ReadNode(FbxNode* root_node, std::vector<Vertex_f>& verts_, std::vector<std::vector<int> >& faces_) {
-    if (!root_node)
+void Model::ReadNode(FbxNode* pNode) {
+    if (!pNode) {
         return;
-    // MeshObject* ret = new MeshObject;
-    int last_index = 0;//上一个模型的最大索引
-    for (int i = 0; i < root_node->GetChildCount(); i++)
-    {
-        FbxNode* p_node = root_node->GetChild(i);
-        for (int j = 0; j < p_node->GetNodeAttributeCount(); j++)
+    }
+    FbxNodeAttribute* pNodeAttribute = pNode->GetNodeAttribute();
+    if (pNodeAttribute) {
+        switch (pNodeAttribute->GetAttributeType())
         {
-            FbxNodeAttribute* p_attribute = p_node->GetNodeAttributeByIndex(j);
-            if (p_attribute->GetAttributeType() == FbxNodeAttribute::eMesh)
-            {
-                FbxMesh* mesh = p_attribute->GetNode()->GetMesh();
-                if (mesh == NULL)
-                {
-                    return;
-                }
-
-                //数据是以形状存储的，会有重复的顶点，所以需要计算索引缓存
-                int count_polygon = mesh->GetPolygonCount();
-                //g_debug.Line(to_wstring(count_polygon));
-
-                ret->_vecVertex.resize(last_index + count_polygon * 3);
-
-                //已初始化标记
-                vector<bool> vec_inited;
-                vec_inited.resize(count_polygon * 3, false);
-
-                int max_index = 0;
-                for (int k = 0; k != count_polygon; ++k)
-                {
-                    if (mesh->GetPolygonSize(k) != 3)
-                    {
-                        g_debug.Line(L"模型数据未三角化！");
-                        continue;
-                    }
-
-                    FbxVector4* ctrl_point = mesh->GetControlPoints();
-
-                    for (int l = 0; l != 3; ++l)
-                    {
-                        int index = mesh->GetPolygonVertex(k, l);
-                        if (index == -1)
-                        {
-                            g_debug.Line(L"获取顶点失败！");
-                            continue;
-                        }
-                        max_index = max(index, max_index);
-                        //依次记录顶点的索引，而顶点数据只存放一次
-                        //g_debug.Line(to_wstring(index));
-                        //g_debug.Line(String::Format(L"(%.0lf)(%.0lf)(%.0lf)", ctrl_point[index][0], ctrl_point[index][1], ctrl_point[index][2]));
-                        ret->_vecIndex.push_back(last_index + index);
-                        if (!vec_inited[index])
-                        {
-                            vec_inited[index] = true;
-                            ret->_vecVertex[last_index + index].position.x = (float)(ctrl_point[index][0]) * 0.01f;
-                            ret->_vecVertex[last_index + index].position.y = (float)(ctrl_point[index][1]) * 0.01f;
-                            ret->_vecVertex[last_index + index].position.z = -(float)(ctrl_point[index][2]) * 0.01f;
-
-                            ret->_vecVertex[last_index + index].color = { 1.0f, 1.0f, 1.0f, 1.0f };
-                        }
-
-                    }
-
-                }
-                last_index += max_index + 1;
-            }
+        case FbxNodeAttribute::eMesh:
+            ProcessMesh(pNode);
+            break;
+        case FbxNodeAttribute::eSkeleton:
+            ProcessSkeleton(pNode);
+        default:
+            break;
         }
     }
-    ret->_vecVertex.resize(last_index + 1);
+    
+    for (int i = 0; i < pNode->GetChildCount(); ++i) {
+        ReadNode(pNode->GetChild(i));
+    }
+}
+
+#pragma region ProcessMesh
+void Model::ProcessMesh(FbxNode* pNode) {
+    FbxMesh* pMesh = pNode->GetMesh();
+    std::cout << "UV Name: " <<
+        pMesh->GetElementUV()->GetName() << std::endl;
+    if (pMesh == nullptr) {
+        std::cout << "eMesh Node: " << pNode->GetName()
+            << " dont have mesh." << std::endl;
+        return;
+    }
+    const size_t CtrlPointCount = pMesh->GetControlPointsCount();
+    const size_t TriangleCount = pMesh->GetPolygonCount();
+    verts_.resize(CtrlPointCount);
+    faces_.resize(TriangleCount, std::vector<int>(3, 0));
+    size_t vertexCount = 0;
+    size_t nonTriangleCount = 0;
+    for (size_t faceInd = 0; faceInd < TriangleCount; faceInd++)
+    {
+        int faceSize = pMesh->GetPolygonSize(faceInd);
+        // 如果模型存在多边形不为三角形
+        if (faceSize > 3) {
+            ++nonTriangleCount;
+            continue;
+        }
+
+        for (size_t vertexIndInTriangle = 0u; vertexIndInTriangle < 3u; vertexIndInTriangle++)
+        {
+            size_t ctrlPointInd  = 
+                pMesh->GetPolygonVertex(faceInd, vertexIndInTriangle);
+            // 读取索引
+            faces_[faceInd][vertexIndInTriangle] = ctrlPointInd;
+            // 读取顶点position
+            ReadPosition(pMesh, ctrlPointInd);
+            // 读取顶点Color
+            // ReadColor(pMesh, ctrlPointInd, vertexCount);
+
+            ++vertexCount;
+        }
+    }
+    std::cout << "NonTriangle conut: " << nonTriangleCount << std::endl;
+}
+
+void Model::ReadPosition(FbxMesh* pMesh, const size_t ctrlPointInd) {
+    FbxVector4 ctrlPoint = pMesh->GetControlPointAt(ctrlPointInd);
+    verts_[ctrlPointInd].position = Vector4f(ctrlPoint[0], ctrlPoint[1], ctrlPoint[2], ctrlPoint[3]);
+}
+
+// void Model::ReadColor(FbxMesh* pMesh, const size_t ctrlPointInd, const size_t vertexCount) {
+//
+//}
+
+#pragma endregion
+
+
+
+
+
+
+void Model::ProcessSkeleton(FbxNode* pNode) {
+
 }
 
 Model::Model(const char *filename) : verts_(), faces_() {
@@ -122,7 +133,7 @@ Model::Model(const char *filename) : verts_(), faces_() {
             }
             else if (!line.compare(0, 3, "vt ")) {
                 iss >> trash;
-                for (int i = 0; i < 2; i++) iss >> verts_[texCoordInd].texCoord[i];
+                for (int i = 0; i < 2; i++) iss >> verts_[texCoordInd].DiffuseCoord[i];
                 float fTrash;
                 iss >> fTrash;
                 texCoordInd++;
@@ -165,7 +176,10 @@ Model::Model(const char *filename) : verts_(), faces_() {
         // Read the nodes of the scene and their attributes recursively.
         FbxNode* lRootNode = lScene->GetRootNode();
         if (lRootNode) {
-            ReadNode(lRootNode, verts_, faces_);
+            ReadNode(lRootNode);
+        }
+        else {
+            std::cout << "File root node is null." << std::endl;
         }
         // Destroy the SDK manager and all the other objects it was handling.
         lSdkManager->Destroy();
