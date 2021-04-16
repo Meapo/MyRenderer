@@ -21,9 +21,12 @@ class Model {
 private:
 	std::vector<Vertex_f> verts_;
 	std::vector<std::vector<int> > faces_;
+	std::vector<Vector4f> bBox;
 	//std::unordered_map<
 	void ReadNode(FbxNode* pNode);
+	void ReadTriangle(FbxMesh* pMesh, size_t startInd, size_t faceInd, size_t& vertexCount, const size_t faceSize);
 	void ReadPosition(FbxMesh* pMesh, const size_t ctrlPointInd);
+	void UpdateBoundingBox(const Vector4f& newPoint);
 	// void ReadColor(FbxMesh* pMesh, const size_t ctrlPointInd, const size_t vertexCount);
 	void ProcessMesh(FbxNode* pNode);
 	void ProcessSkeleton(FbxNode* pNode);
@@ -34,6 +37,8 @@ public:
 	int nfaces();
 	Vertex_f vert(int i);
 	std::vector<int> face(int idx);
+	Vector4f MinBBox();
+	Vector4f MaxBBox();
 };
 
 #endif //__MODEL_H__

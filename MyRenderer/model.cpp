@@ -42,8 +42,13 @@ void Model::ReadNode(FbxNode* pNode) {
 #pragma region ProcessMesh
 void Model::ProcessMesh(FbxNode* pNode) {
     FbxMesh* pMesh = pNode->GetMesh();
-    std::cout << "UV Name: " <<
-        pMesh->GetElementUV()->GetName() << std::endl;
+    // Test Code
+    /*{
+        std::cout << "pMesh->GetPolygonCount(): " <<
+            pMesh->GetPolygonCount() << std::endl;
+        return; 
+    }*/
+    
     if (pMesh == nullptr) {
         std::cout << "eMesh Node: " << pNode->GetName()
             << " dont have mesh." << std::endl;
@@ -53,37 +58,78 @@ void Model::ProcessMesh(FbxNode* pNode) {
     const size_t TriangleCount = pMesh->GetPolygonCount();
     verts_.resize(CtrlPointCount);
     faces_.resize(TriangleCount, std::vector<int>(3, 0));
-    size_t vertexCount = 0;
-    size_t nonTriangleCount = 0;
+    size_t PreVertexCount = 0;
+    size_t nonTriangleMaxSize = 0;
     for (size_t faceInd = 0; faceInd < TriangleCount; faceInd++)
     {
-        int faceSize = pMesh->GetPolygonSize(faceInd);
-        // 如果模型存在多边形不为三角形
-        if (faceSize > 3) {
-            ++nonTriangleCount;
-            continue;
+        const int faceSize = pMesh->GetPolygonSize(faceInd);
+        // 如果模型存在四边形面
+        if (faceSize == 4) {
+            // 判读点1，3是否在向量02的两侧
+            FbxVector4 ctrlPoint_0 = pMesh->GetControlPointAt(
+                pMesh->GetPolygonVertex(faceInd, 0));
+            FbxVector4 ctrlPoint_1 = pMesh->GetControlPointAt(
+                pMesh->GetPolygonVertex(faceInd, 1));
+            FbxVector4 ctrlPoint_2 = pMesh->GetControlPointAt(
+                pMesh->GetPolygonVertex(faceInd, 2));
+            FbxVector4 ctrlPoint_3 = pMesh->GetControlPointAt(
+                pMesh->GetPolygonVertex(faceInd, 3));
+            FbxVector4 Vector_01 = ctrlPoint_1 - ctrlPoint_0;
+            FbxVector4 Vector_02 = ctrlPoint_2 - ctrlPoint_0;
+            FbxVector4 Vector_03 = ctrlPoint_3 - ctrlPoint_0;
+            FbxVector4 cross21 = Vector_02.CrossProduct(Vector_01);
+            FbxVector4 cross23 = Vector_02.CrossProduct(Vector_03);
+            if ((cross21[3] > 0 && cross23[3] < 0) || (cross21[3] < 0 && cross23[3] > 0)) {
+                ReadTriangle(pMesh, 0, faceInd, PreVertexCount, faceSize);
+                ReadTriangle(pMesh, 2, faceInd, PreVertexCount, faceSize);
+            }
+            else {
+                ReadTriangle(pMesh, 1, faceInd, PreVertexCount, faceSize);
+                ReadTriangle(pMesh, 3, faceInd, PreVertexCount, faceSize);
+            }
+            
         }
-
-        for (size_t vertexIndInTriangle = 0u; vertexIndInTriangle < 3u; vertexIndInTriangle++)
-        {
-            size_t ctrlPointInd  = 
-                pMesh->GetPolygonVertex(faceInd, vertexIndInTriangle);
-            // 读取索引
-            faces_[faceInd][vertexIndInTriangle] = ctrlPointInd;
-            // 读取顶点position
-            ReadPosition(pMesh, ctrlPointInd);
-            // 读取顶点Color
-            // ReadColor(pMesh, ctrlPointInd, vertexCount);
-
-            ++vertexCount;
+        else if (faceSize == 3){
+            ReadTriangle(pMesh, 0, faceInd, PreVertexCount, faceSize);
+        }
+        else {
+            std::cout << "Exist face size not 3 or 4!" << std::endl;
         }
     }
-    std::cout << "NonTriangle conut: " << nonTriangleCount << std::endl;
 }
+
+void Model::ReadTriangle(FbxMesh* pMesh, size_t startInd, size_t faceInd, size_t& PreVertexCount, const size_t faceSize) {
+    for (size_t vertexIndInPolygon = startInd; vertexIndInPolygon < startInd + 3; vertexIndInPolygon++)
+    {
+        size_t triangleInd = vertexIndInPolygon - startInd;
+        size_t polygonInd = vertexIndInPolygon % faceSize;
+        size_t ctrlPointInd = pMesh->GetPolygonVertex(faceInd, polygonInd);
+        // 读取索引
+        faces_[faceInd][triangleInd] = ctrlPointInd;
+        // 读取顶点position
+        ReadPosition(pMesh, ctrlPointInd);
+        // 读取顶点Color
+        // ReadColor(pMesh, ctrlPointInd, PreVertexCount + polygonInd);
+
+        
+    }
+    PreVertexCount += faceSize;
+}
+
 
 void Model::ReadPosition(FbxMesh* pMesh, const size_t ctrlPointInd) {
     FbxVector4 ctrlPoint = pMesh->GetControlPointAt(ctrlPointInd);
-    verts_[ctrlPointInd].position = Vector4f(ctrlPoint[0], ctrlPoint[1], ctrlPoint[2], ctrlPoint[3]);
+    verts_[ctrlPointInd].position = Vector4f(ctrlPoint[0], ctrlPoint[1], ctrlPoint[2], 1.0f);
+    UpdateBoundingBox(verts_[ctrlPointInd].position);
+}
+
+void Model::UpdateBoundingBox(const Vector4f& newPoint) {
+    for (size_t i = 0; i < 3; ++i) {
+        if (newPoint[i] > bBox[1][i])
+            bBox[1][i] = newPoint[i];
+        else if (newPoint[i] < bBox[0][i])
+            bBox[0][i] = newPoint[i];
+    }
 }
 
 // void Model::ReadColor(FbxMesh* pMesh, const size_t ctrlPointInd, const size_t vertexCount) {
@@ -92,16 +138,11 @@ void Model::ReadPosition(FbxMesh* pMesh, const size_t ctrlPointInd) {
 
 #pragma endregion
 
-
-
-
-
-
 void Model::ProcessSkeleton(FbxNode* pNode) {
-
+    
 }
 
-Model::Model(const char *filename) : verts_(), faces_() {
+Model::Model(const char *filename) : verts_(), faces_(), bBox(2, Vector4f(.0f, .0f, .0f, 1.0f)) {
     std::string fileExtension = getFileExtension(filename);
     if (fileExtension == ".obj") {
         std::ifstream in;
@@ -205,3 +246,10 @@ Vertex_f Model::vert(int i) {
     return verts_[i];
 }
 
+Vector4f Model::MinBBox() {
+    return bBox[0];
+}
+
+Vector4f Model::MaxBBox() {
+    return bBox[1];
+}
