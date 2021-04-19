@@ -2,6 +2,9 @@
 #define __IMAGE_H__
 
 #include <fstream>
+#include <Eigen>
+
+using namespace Eigen;
 
 #pragma pack(push,1)
 struct TGA_Header {
@@ -44,6 +47,10 @@ struct TGAColor {
 	TGAColor(const TGAColor &c) : val(c.val), bytespp(c.bytespp) {
 	}
 
+	TGAColor(const Vector4f& vec) : r(vec[0]), g(vec[1]), b(vec[2]), a(vec[3]) {
+
+	}
+
 	TGAColor(const unsigned char *p, int bpp) : val(0), bytespp(bpp) {
 		for (int i=0; i<bpp; i++) {
 			raw[i] = p[i];
@@ -56,6 +63,36 @@ struct TGAColor {
 			val = c.val;
 		}
 		return *this;
+	}
+
+	TGAColor& operator +=(const TGAColor& c) {
+		bytespp += c.bytespp;
+		r += c.r;
+		g += c.g;
+		b += c.b;
+		a += c.a;
+		return *this;
+	}
+
+	TGAColor& operator*(const float f) {
+		r *= f;
+		g *= f;
+		b *= f;
+		a *= f;
+		return *this;
+	}
+
+	TGAColor operator+(const TGAColor& c) {
+		TGAColor result;
+		result.r = r + c.r;
+		result.g = g + c.g;
+		result.b = b + c.b;
+		result.a = a + c.a;
+		return result;
+	}
+
+	Vector4f Color2Vec4f() {
+		return Vector4f(r, g, b, a);
 	}
 };
 
@@ -82,13 +119,13 @@ public:
 	bool flip_horizontally();
 	bool flip_vertically();
 	bool scale(int w, int h);
-	TGAColor get(int x, int y);
+	TGAColor get(int x, int y) const;
 	bool set(int x, int y, TGAColor c);
 	~TGAImage();
 	TGAImage & operator =(const TGAImage &img);
-	int get_width();
-	int get_height();
-	int get_bytespp();
+	int get_width() const;
+	int get_height() const;
+	int get_bytespp() const;
 	unsigned char *buffer();
 	void clear();
 };

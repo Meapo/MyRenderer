@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <Eigen>
 #include <fbxsdk.h>
+#include "tgaimage.h"
 
 using namespace Eigen;
 
@@ -14,7 +15,6 @@ struct Vertex_f
 	Vector2f DiffuseCoord;
 	Vector3f normal;
 	Vector3f tangent;
-	// Vector4f color;
 };
 
 class Model {
@@ -22,12 +22,14 @@ private:
 	std::vector<Vertex_f> verts_;
 	std::vector<std::vector<int> > faces_;
 	std::vector<Vector4f> bBox;
-	//std::unordered_map<
+
 	void ReadNode(FbxNode* pNode);
-	void ReadTriangle(FbxMesh* pMesh, size_t startInd, size_t faceInd, size_t& vertexCount, const size_t faceSize);
+	void ReadTriangle(FbxMesh* pMesh, size_t startInd, size_t faceInd, size_t triangleCounter, size_t vertexCounter, const size_t faceSize);
 	void ReadPosition(FbxMesh* pMesh, const size_t ctrlPointInd);
+	void ReadUV(FbxMesh* pMesh, const size_t ctrlPointInd, const size_t vertexCounter, const size_t uvLayer);
+	void ReadNormal(FbxMesh* pMesh, size_t ctrlPointIndex, size_t vertexCounter);
+	void ReadTangent(FbxMesh* pMesh, size_t ctrlPointIndex, size_t vertexCounter);
 	void UpdateBoundingBox(const Vector4f& newPoint);
-	// void ReadColor(FbxMesh* pMesh, const size_t ctrlPointInd, const size_t vertexCount);
 	void ProcessMesh(FbxNode* pNode);
 	void ProcessSkeleton(FbxNode* pNode);
 public:
