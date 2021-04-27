@@ -3,6 +3,7 @@
 #include <fstream>
 #include <sstream>
 #include <vector>
+#include <cassert>
 #include "model.h"
 
 std::string getFileExtension(const char* filename) {
@@ -50,12 +51,22 @@ bool isAtOnePlane(const Vector3f& vec1, const Vector3f& vec2, const Vector3f& ve
 }
 #pragma endregion
 
+std::ostream& operator<<(std::ostream& os, FbxAMatrix& m) {
+    os << m[0][0] << " " << m[0][1] << " " << m[0][2] << std::endl
+        << m[1][0] << " " << m[1][1] << " " << m[1][2] << std::endl
+        << m[2][0] << " " << m[2][1] << " " << m[2][2] << std::endl;
+
+    return os;
+}
+
 
 #pragma region ProcessMesh
 void Model::ProcessMesh(FbxNode* pNode) {
     FbxMesh* pMesh = pNode->GetMesh();
     // Test Code
     /*{
+        FbxGeometryElementUV* pVertexUV = pMesh->GetElementUV(0);
+        std::cout << pVertexUV->GetDirectArray().GetCount() << std::endl;
         return; 
     }*/
     
@@ -64,83 +75,76 @@ void Model::ProcessMesh(FbxNode* pNode) {
             << " dont have mesh." << std::endl;
         return;
     }
+
     const size_t CtrlPointCount = pMesh->GetControlPointsCount();
     const size_t PolygonCount = pMesh->GetPolygonCount();
-    verts_.resize(CtrlPointCount);
-    faces_.resize(PolygonCount * 2, std::vector<int>(3, 0));
-    size_t PreVertexCounter = 0;
-    size_t triangleCounter = 0;
-    for (size_t faceInd = 0; faceInd < PolygonCount; faceInd++)
+    const size_t beginVertsInd = verts_.size(), beginFacesInd = faces_.size();
+    verts_.resize(beginVertsInd + CtrlPointCount);
+    for (size_t ctrlPointInd = 0, VertsInd = beginVertsInd; ctrlPointInd < pMesh->GetControlPointsCount(); ctrlPointInd++, VertsInd++)
     {
-        const int faceSize = pMesh->GetPolygonSize(faceInd);
-        // 如果模型存在四边形面
-        if (faceSize == 4) {
-            // 判读点1，3是否在向量02的两侧(不需要判断，因为只给出四个点，两种空间四边形都有可能，在这里就采用012，230的方式划分)
-            /*FbxVector4 ctrlPoint_0 = pMesh->GetControlPointAt(
-                pMesh->GetPolygonVertex(faceInd, 0));
-            FbxVector4 ctrlPoint_1 = pMesh->GetControlPointAt(
-                pMesh->GetPolygonVertex(faceInd, 1));
-            FbxVector4 ctrlPoint_2 = pMesh->GetControlPointAt(
-                pMesh->GetPolygonVertex(faceInd, 2));
-            FbxVector4 ctrlPoint_3 = pMesh->GetControlPointAt(
-                pMesh->GetPolygonVertex(faceInd, 3));
-            FbxVector4 Vector_01 = ctrlPoint_1 - ctrlPoint_0;
-            FbxVector4 Vector_02 = ctrlPoint_2 - ctrlPoint_0;
-            FbxVector4 Vector_03 = ctrlPoint_3 - ctrlPoint_0;
-            Vector3f vec01(Vector_01[0], Vector_01[1], Vector_01[2]);
-            Vector3f vec02(Vector_02[0], Vector_02[1], Vector_02[2]);          
-            Vector3f vec03(Vector_03[0], Vector_03[1], Vector_03[2]);
-            Vector3f cross21 = vec02.cross(vec01);
-            Vector3f cross23 = vec02.cross(vec03);
-            if ((cross21[2] > 0 && cross23[2] < 0) || (cross21[2] < 0 && cross23[2] > 0)) {*/
-            ReadTriangle(pMesh, 0, faceInd, triangleCounter, PreVertexCounter, faceSize);
-            ++triangleCounter;
-            ReadTriangle(pMesh, 2, faceInd, triangleCounter, PreVertexCounter, faceSize);
-            ++triangleCounter;
-            /*}
-            else {
-                ReadTriangle(pMesh, 1, faceInd, triangleCounter, PreVertexCounter, faceSize);
-                ++triangleCounter;
-                ReadTriangle(pMesh, 3, faceInd, triangleCounter, PreVertexCounter, faceSize);
-                ++triangleCounter;
-            }*/
-            PreVertexCounter += 4;
-        }
-        else if (faceSize == 3){
-            ReadTriangle(pMesh, 0, faceInd, triangleCounter, PreVertexCounter, faceSize);
-            ++triangleCounter;
-            PreVertexCounter += 3;
-        }
-        else {
-            std::cout << "Exist face size not 3 or 4!" << std::endl;
-        }
-    }
-}
-
-void Model::ReadTriangle(FbxMesh* pMesh, size_t startInd, size_t faceInd, size_t triangleCounter, size_t PreVertexCounter, const size_t faceSize) {
-    for (size_t vertexIndInPolygon = startInd; vertexIndInPolygon < startInd + 3; vertexIndInPolygon++)
-    {
-        size_t triangleInd = vertexIndInPolygon - startInd;
-        size_t polygonInd = vertexIndInPolygon % faceSize;
-        size_t ctrlPointInd = pMesh->GetPolygonVertex(faceInd, polygonInd);
-        // 读取索引
-        faces_[triangleCounter][triangleInd] = ctrlPointInd;
         // 读取顶点position
-        ReadPosition(pMesh, ctrlPointInd);
-        // 读取顶点Diffuse UV
-        ReadUV(pMesh, ctrlPointInd, PreVertexCounter + polygonInd, 0);
-        // 读取顶点normal
-        ReadNormal(pMesh, ctrlPointInd, PreVertexCounter + polygonInd);
-        // 读取顶点tangent
-        ReadTangent(pMesh, ctrlPointInd, PreVertexCounter + polygonInd);
+        ReadPosition(pMesh, ctrlPointInd, VertsInd);
     }
+
+    size_t faceSizeCounter = 0;
+    for (size_t faceInd = 0; faceInd < PolygonCount; faceInd++) {
+        faceSizeCounter += pMesh->GetPolygonSize(faceInd);
+        faceSizeCounter -= 2;
+    }
+
+    faces_.resize(beginFacesInd + faceSizeCounter, std::vector<int>(6, 0));
+    size_t PreVertexCounter = 0;
+    size_t triangleCounter = beginFacesInd;
+    for (size_t PolygonInd = 0; PolygonInd < PolygonCount; PolygonInd++)
+    {
+        ReadPolygon(pMesh, PolygonInd, triangleCounter, PreVertexCounter, beginVertsInd);
+    }
+
+    ConnectMaterialToMesh(pMesh);
+    LoadMaterial(pMesh, beginFacesInd);
+}
+
+void Model::ReadPolygon(FbxMesh* pMesh, const size_t PolygonInd, size_t& triangleCounter, size_t& PreVertexCounter, const size_t beginVertsInd) {
+    const size_t faceSize = pMesh->GetPolygonSize(PolygonInd);
+    
+    // 读取0顶点
+    size_t vertsInd_0 = pMesh->GetPolygonVertex(PolygonInd, 0) + beginVertsInd;
+    // 读取顶点UV
+    ReadUV(pMesh, vertsInd_0, PreVertexCounter, 0);
+    // 读取顶点normal
+    ReadNormal(pMesh, vertsInd_0, PreVertexCounter);
+    // 读取顶点tangent
+    ReadTangent(pMesh, vertsInd_0, PreVertexCounter);
+    for (size_t startInd = 1; startInd + 1 < faceSize; startInd++)
+    {
+        // 读取索引
+        faces_[triangleCounter][0] = vertsInd_0;
+
+        for (size_t vertexIndInPolygon = startInd; vertexIndInPolygon < startInd + 2; vertexIndInPolygon++)
+        {
+            size_t triangleInd = vertexIndInPolygon - startInd + 1;
+            size_t ctrlPointInd = pMesh->GetPolygonVertex(PolygonInd, vertexIndInPolygon);
+            size_t vertsInd = ctrlPointInd + beginVertsInd;
+            size_t vertecCounter = PreVertexCounter + vertexIndInPolygon;
+            // 读取索引
+            faces_[triangleCounter][triangleInd] = vertsInd;
+            // 读取顶点UV
+            ReadUV(pMesh, vertsInd, vertecCounter, 0);
+            // 读取顶点normal
+            ReadNormal(pMesh, vertsInd, vertecCounter);
+            // 读取顶点tangent
+            ReadTangent(pMesh, vertsInd, vertecCounter);
+        }
+        triangleCounter++;
+    }
+    PreVertexCounter += faceSize;
 }
 
 
-void Model::ReadPosition(FbxMesh* pMesh, const size_t ctrlPointInd) {
+void Model::ReadPosition(FbxMesh* pMesh, const size_t ctrlPointInd, const size_t VertsInd) {
     FbxVector4 ctrlPoint = pMesh->GetControlPointAt(ctrlPointInd);
-    verts_[ctrlPointInd].position = Vector4f(ctrlPoint[0], ctrlPoint[1], ctrlPoint[2], 1.0f);
-    UpdateBoundingBox(verts_[ctrlPointInd].position);
+    verts_[VertsInd].position = Vector4f(ctrlPoint[0], ctrlPoint[1], ctrlPoint[2], 1.0f);
+    UpdateBoundingBox(verts_[VertsInd].position);
 }
 
 void Model::ReadUV(FbxMesh* pMesh, const size_t ctrlPointInd, const size_t vertexCounter, const size_t uvLayer) {
@@ -157,16 +161,16 @@ void Model::ReadUV(FbxMesh* pMesh, const size_t ctrlPointInd, const size_t verte
         {
         case FbxGeometryElement::eDirect :
         {
-            verts_[ctrlPointInd].DiffuseCoord.x() = pVertexUV->GetDirectArray().GetAt(ctrlPointInd)[0];
-            verts_[ctrlPointInd].DiffuseCoord.y() = pVertexUV->GetDirectArray().GetAt(ctrlPointInd)[1];
+            verts_[ctrlPointInd].uv.x() = pVertexUV->GetDirectArray().GetAt(ctrlPointInd)[0];
+            verts_[ctrlPointInd].uv.y() = pVertexUV->GetDirectArray().GetAt(ctrlPointInd)[1];
         }
         break;
 
         case FbxGeometryElement::eIndexToDirect :
         {
             size_t ind = pVertexUV->GetIndexArray().GetAt(ctrlPointInd);
-            verts_[ctrlPointInd].DiffuseCoord.x() = pVertexUV->GetDirectArray().GetAt(ind)[0];
-            verts_[ctrlPointInd].DiffuseCoord.y() = pVertexUV->GetDirectArray().GetAt(ind)[1];
+            verts_[ctrlPointInd].uv.x() = pVertexUV->GetDirectArray().GetAt(ind)[0];
+            verts_[ctrlPointInd].uv.y() = pVertexUV->GetDirectArray().GetAt(ind)[1];
         }
         break;
 
@@ -182,15 +186,15 @@ void Model::ReadUV(FbxMesh* pMesh, const size_t ctrlPointInd, const size_t verte
         {
         case FbxGeometryElement::eDirect: 
         {
-            verts_[ctrlPointInd].DiffuseCoord.x() = pVertexUV->GetDirectArray().GetAt(vertexCounter)[0];
-            verts_[ctrlPointInd].DiffuseCoord.y() = pVertexUV->GetDirectArray().GetAt(vertexCounter)[1];
+            verts_[ctrlPointInd].uv.x() = pVertexUV->GetDirectArray().GetAt(vertexCounter)[0];
+            verts_[ctrlPointInd].uv.y() = pVertexUV->GetDirectArray().GetAt(vertexCounter)[1];
         }
         break;
         case FbxGeometryElement::eIndexToDirect:
         {
             size_t ind = pVertexUV->GetIndexArray().GetAt(vertexCounter);
-            verts_[ctrlPointInd].DiffuseCoord.x() = pVertexUV->GetDirectArray().GetAt(ind)[0];
-            verts_[ctrlPointInd].DiffuseCoord.y() = pVertexUV->GetDirectArray().GetAt(ind)[1];
+            verts_[ctrlPointInd].uv.x() = pVertexUV->GetDirectArray().GetAt(ind)[0];
+            verts_[ctrlPointInd].uv.y() = pVertexUV->GetDirectArray().GetAt(ind)[1];
         }
         break;
 
@@ -208,7 +212,7 @@ void Model::ReadNormal(FbxMesh* pMesh, size_t ctrlPointIndex, size_t vertexCount
     {
         return;
     }
-
+    verts_[ctrlPointIndex].normal.w() = .0f;
     FbxGeometryElementNormal* leNormal = pMesh->GetElementNormal(0);
     switch (leNormal->GetMappingMode())
     {
@@ -351,18 +355,208 @@ void Model::UpdateBoundingBox(const Vector4f& newPoint) {
     }
 }
 
+void Model::ConnectMaterialToMesh(FbxMesh* pMesh)
+{
+    // Get the material index list of current mesh
+    FbxLayerElementArrayTemplate<int>* pMaterialIndices;
+    FbxGeometryElement::EMappingMode   materialMappingMode = FbxGeometryElement::eNone;
+    int polygonCount = pMesh->GetPolygonCount();
+    if (pMesh->GetElementMaterial())
+    {
+        pMaterialIndices = &pMesh->GetElementMaterial()->GetIndexArray();
+        materialMappingMode = pMesh->GetElementMaterial()->GetMappingMode();
+        if (pMaterialIndices)
+        {
+            switch (materialMappingMode)
+            {
+            case FbxGeometryElement::eByPolygon:
+            {
+                if (pMaterialIndices->GetCount() == polygonCount)
+                {
+                    int faceInd = 0;
+                    for (int polygonInd = 0; polygonInd < polygonCount; ++polygonInd)
+                    {
+                        int materialIndex = pMaterialIndices->GetAt(polygonInd);
+                        if (pMesh->GetPolygonSize(polygonInd) == 3)
+                        {
+                            faces_[faceInd++][3] = pMesh->GetNode()->GetMaterial(materialIndex)->GetUniqueID();
+                        }
+                        else if (pMesh->GetPolygonSize(polygonInd) == 4)
+                        {
+                            faces_[faceInd++][3] = pMesh->GetNode()->GetMaterial(materialIndex)->GetUniqueID();
+                            faces_[faceInd++][3] = pMesh->GetNode()->GetMaterial(materialIndex)->GetUniqueID();
+                        }
+                    }
+                }
+            }
+            break;
 
+            case FbxGeometryElement::eAllSame:
+            {
+                int lMaterialIndex = pMaterialIndices->GetAt(0);
+                int id = pMesh->GetNode()->GetMaterial(lMaterialIndex)->GetUniqueID();
+                int faceInd = 0;
+                for (int polygonInd = 0; polygonInd < polygonCount; ++polygonInd)
+                {
+                    if (pMesh->GetPolygonSize(polygonInd) == 3)
+                    {
+                        faces_[faceInd++][3] = id;
+                    }
+                    else if (pMesh->GetPolygonSize(polygonInd) == 4)
+                    {
+                        faces_[faceInd++][3] = id;
+                        faces_[faceInd++][3] = id;
+                    }
+                }
+            }
+            }
+        }
+    }
+}
+
+void Model::LoadMaterial(FbxMesh* pMesh, const size_t beginFaceInd)
+{
+    size_t materialCount = 0;
+    FbxNode* pNode;
+
+    if (pMesh && pMesh->GetNode())
+    {
+        pNode = pMesh->GetNode();
+        materialCount = pNode->GetMaterialCount();
+        if (materialCount > 0)
+        {
+            for (int materialIndex = 0; materialIndex < materialCount; materialIndex++)
+            {
+                FbxSurfaceMaterial* pSurfaceMaterial = pNode->GetMaterial(materialIndex);
+                LoadMaterialAttribute(pSurfaceMaterial, beginFaceInd);
+                LoadMaterialTexture(pSurfaceMaterial, pNode->GetName(), beginFaceInd);
+            }
+        }
+    }
+}
+
+void Model::LoadMaterialTexture(FbxSurfaceMaterial* pSurfaceMaterial, const std::string& nodeName, const size_t beginFaceInd)
+{
+    int textureLayerIndex;
+    FbxProperty pProperty;
+    int texID;
+    for (textureLayerIndex = 0; textureLayerIndex < FbxLayerElement::sTypeTextureCount; ++textureLayerIndex)
+    {
+        pProperty = pSurfaceMaterial->FindProperty(FbxLayerElement::sTextureChannelNames[textureLayerIndex]);
+        if (pProperty.IsValid())
+        {
+            int textureCount = pProperty.GetSrcObjectCount();
+
+            for (int j = 0; j < textureCount; ++j)
+            {
+                FbxTexture* pTexture = FbxCast<FbxTexture>(pProperty.GetSrcObject(j));
+                if (pTexture)
+                {
+                    size_t texInd = pTexture->GetUniqueID();
+                    // Use pTexture to load the attribute of current texture...
+                    if (!textures_.count(texInd))
+                    {
+                        std::string fileName;
+                        size_t ind = -1;
+                        if (!strcmp("DiffuseColor", FbxLayerElement::sTextureChannelNames[textureLayerIndex]))
+                        {
+                            fileName = modelFilePath_ + nodeName + "_color.tga";
+                            ind = 4;
+                        }
+                        else if (!strcmp("SpecularColor", FbxLayerElement::sTextureChannelNames[textureLayerIndex]))
+                        {
+                            // unknown
+                        }
+                        else if (!strcmp("Bump", FbxLayerElement::sTextureChannelNames[textureLayerIndex]))
+                        {
+                            fileName = modelFilePath_ + nodeName + "_normal.tga";
+                            ind = 5;
+                        }
+                        if (fileName != "") {
+                            textures_[texInd] = new TGAImage();
+                            textures_[texInd]->read_tga_file(fileName.c_str());
+                            std::cout << textures_[texInd]->get_bytespp() << std::endl;
+                            for (size_t i = beginFaceInd; i < faces_.size(); i++)
+                            {
+                                faces_[i][ind] = texInd;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+Vector3f FbxDouble3ToVec3f(const FbxDouble3& d) {
+    return Vector3f(d[0], d[1], d[2]);
+}
+
+void Model::LoadMaterialAttribute(FbxSurfaceMaterial* pSurfaceMaterial, const size_t beginFaceInd) 
+{
+    int uniqueId = pSurfaceMaterial->GetUniqueID();
+    for (size_t i = beginFaceInd; i < faces_.size(); i++)
+    {
+        faces_[i][3] = uniqueId;  // 记录面的材质索引
+    }
+    // Phong material
+    if (pSurfaceMaterial->GetClassId().Is(FbxSurfacePhong::ClassId))
+    {
+        // Ambient Color
+        materials_[uniqueId].Ambient() = FbxDouble3ToVec3f(((FbxSurfacePhong*)pSurfaceMaterial)->Ambient);
+
+        // Diffuse Color
+        materials_[uniqueId].Diffuse() = FbxDouble3ToVec3f(((FbxSurfacePhong*)pSurfaceMaterial)->Diffuse);
+
+        // Specular Color
+        materials_[uniqueId].Specular() = FbxDouble3ToVec3f(((FbxSurfacePhong*)pSurfaceMaterial)->Specular);
+
+        // Emissive Color
+        materials_[uniqueId].Emissive() = FbxDouble3ToVec3f(((FbxSurfacePhong*)pSurfaceMaterial)->Emissive);
+
+        // Opacity
+        materials_[uniqueId].TransparencyFactor() = ((FbxSurfacePhong*)pSurfaceMaterial)->TransparencyFactor;
+      
+        // Shininess
+        materials_[uniqueId].Shininess() = ((FbxSurfacePhong*)pSurfaceMaterial)->Shininess;
+
+        // Reflectivity
+        materials_[uniqueId].ReflectionFactor() = ((FbxSurfacePhong*)pSurfaceMaterial)->ReflectionFactor;
+
+        return;
+    }
+
+    // Lambert material
+    if (pSurfaceMaterial->GetClassId().Is(FbxSurfaceLambert::ClassId))
+    {
+        // Ambient Color
+        materials_[uniqueId].Ambient() = FbxDouble3ToVec3f(((FbxSurfacePhong*)pSurfaceMaterial)->Ambient);
+
+        // Diffuse Color
+        materials_[uniqueId].Diffuse() = FbxDouble3ToVec3f(((FbxSurfacePhong*)pSurfaceMaterial)->Diffuse);
+
+        // Emissive Color
+        materials_[uniqueId].Emissive() = FbxDouble3ToVec3f(((FbxSurfacePhong*)pSurfaceMaterial)->Emissive);
+
+        // Opacity
+        materials_[uniqueId].TransparencyFactor() = ((FbxSurfacePhong*)pSurfaceMaterial)->TransparencyFactor;
+
+        return;
+    }
+}
 #pragma endregion
 
 void Model::ProcessSkeleton(FbxNode* pNode) {
     
 }
 
-Model::Model(const char *filename) : verts_(), faces_(), bBox(2, Vector4f(.0f, .0f, .0f, 1.0f)) {
+Model::Model(const char* path, const char *filename) : verts_(), faces_(), bBox(2, Vector4f(.0f, .0f, .0f, 1.0f)), materials_(), textures_(), modelFilePath_(path) {
+    std::string fullFileName(path);
+    fullFileName += static_cast<std::string>(filename);
     std::string fileExtension = getFileExtension(filename);
     if (fileExtension == ".obj") {
         std::ifstream in;
-        in.open(filename, std::ifstream::in);
+        in.open(fullFileName, std::ifstream::in);
         if (in.fail()) return;
         std::string line;
         int VertsCount = 0;
@@ -390,7 +584,7 @@ Model::Model(const char *filename) : verts_(), faces_(), bBox(2, Vector4f(.0f, .
             }
             else if (!line.compare(0, 3, "vt ")) {
                 iss >> trash;
-                for (int i = 0; i < 2; i++) iss >> verts_[texCoordInd].DiffuseCoord[i];
+                for (int i = 0; i < 2; i++) iss >> verts_[texCoordInd].uv[i];
                 float fTrash;
                 iss >> fTrash;
                 texCoordInd++;
@@ -415,7 +609,7 @@ Model::Model(const char *filename) : verts_(), faces_(), bBox(2, Vector4f(.0f, .
         FbxImporter* lImporter = FbxImporter::Create(lSdkManager, "");
 
         // Use the first argument as the filename for the importer.
-        if (!lImporter->Initialize(filename, -1, lSdkManager->GetIOSettings())) {
+        if (!lImporter->Initialize(fullFileName.c_str(), -1, lSdkManager->GetIOSettings())) {
             printf("Call to FbxImporter::Initialize() failed.\n");
             printf("Error returned: %s\n\n", lImporter->GetStatus().GetErrorString());
             exit(-1);
@@ -444,6 +638,7 @@ Model::Model(const char *filename) : verts_(), faces_(), bBox(2, Vector4f(.0f, .
 }
 
 Model::~Model() {
+
 }
 
 int Model::nverts() {
@@ -454,19 +649,78 @@ int Model::nfaces() {
     return (int)faces_.size();
 }
 
-std::vector<int> Model::face(int idx) {
+std::vector<int> Model::face(size_t idx) {
     return faces_[idx];
 }
 
-Vertex_f Model::vert(int i) {
+Vertex_f& Model::vert(size_t i) {
     return verts_[i];
 }
 
-Vector4f Model::MinBBox() {
+Vertex_f& Model::vert(size_t faceInd, size_t vertInFace) {
+    assert(vertInFace < 3);
+    return verts_[faces_[faceInd][vertInFace]];
+}
+
+
+const Vector4f& Model::MinBBox() {
     return bBox[0];
 }
 
-Vector4f Model::MaxBBox() {
+const Vector4f& Model::MaxBBox() {
     return bBox[1];
 }
+
+const Vector4f const Model::getTextureColor(size_t texInd, const Vector2f& _UV) {
+    const TGAImage* texture = textures_[texInd];
+    float x = _UV[0] * texture->get_width(), y = (1 - _UV[1]) * texture->get_height();
+    Vector2i uv[4];
+    uv[0] = { std::floor(x - .5f), std::floor(y - .5f) };
+    uv[1] = { uv[0].x(), uv[0].y() + 1 };
+    uv[2] = { uv[0].x() + 1, uv[0].y() + 1 };
+    uv[3] = { uv[0].x() + 1, uv[0].y() };
+    if (uv[0].x() >= 0 && uv[0].x() < (texture->get_width() - 1) && uv[0].y() >= 0 && uv[0].y() < (texture->get_height() - 1)) {
+        // 在边界内使用bilinnear
+        Vector4f color[4];
+        for (size_t i = 0; i < 4; i++)
+        {
+            color[i] = texture->get(uv[i].x(), uv[i].y()).Color2Vec4f();
+        }
+        float t = x - uv[0].x() - .5f;
+        Vector4f colorLerp0 = Lerp(color[0], color[3], t);
+        Vector4f colorLerp1 = Lerp(color[1], color[2], t);
+        float s = y - uv[0].y() - .5f;
+        Vector4f result = Lerp(colorLerp0, colorLerp1, s);
+        return result;
+    }
+    else {
+        // 在边界外使用最近的点
+        Vector4f color = texture->get(std::round(x), std::round(y)).Color2Vec4f();
+        return color;
+    }
+}
+
+const Vector4f const Model::getTextureNormal(size_t texInd, const Vector2f& _UV) {
+    const TGAImage* NormalMap = textures_[texInd];
+    float x = _UV[0] * NormalMap->get_width(), y = (1 - _UV[1]) * NormalMap->get_height();
+    TGAColor color = NormalMap->get(std::round(x), std::round(y));
+    Vector4f res;
+    res[3] = .0f;
+    for (size_t i = 0; i < 3; i++)
+    {
+        res[2 - i] = static_cast<float>(color[i]) / 255.f * 2.f - 1.f;
+    }
+    return res;
+}
+
+
+const Material& Model::getMaterial(size_t ind) {
+    return materials_[ind];
+}
+
+static Vector4f Lerp(const Vector4f& vec0, const Vector4f& vec1, float t) {
+    return vec0 + t * (vec1 - vec0);
+}
+
+
 

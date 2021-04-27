@@ -54,16 +54,16 @@ void DrawLine(int x0, int y0, int x1, int y1, TGAImage& image, const TGAColor& c
 	}*/
 }
 
-Vector3f barycentric(Vertex_f* pts, Vector4f& P) {
-	Vector3f vec1 = Vector3f(pts[1].position.x() - pts[0].position.x(), pts[2].position.x() - pts[0].position.x(), pts[0].position.x() - P.x());
-	Vector3f vec2 = Vector3f(pts[1].position.y() - pts[0].position.y(), pts[2].position.y() - pts[0].position.y(), pts[0].position.y() - P.y());
+Vector3f barycentric(const Vector4f* pts, const Vector4f& P) {
+	Vector3f vec1 = Vector3f(pts[1].x() - pts[0].x(), pts[2].x() - pts[0].x(), pts[0].x() - P.x());
+	Vector3f vec2 = Vector3f(pts[1].y() - pts[0].y(), pts[2].y() - pts[0].y(), pts[0].y() - P.y());
 	Vector3f crs = vec1.cross(vec2);
 	if (std::abs(crs.z()) < 1e-2)   // 意味着crs.z == 0，即三角形的边共线，返回一个负值即可
 		return Vector3f(-1, 1, 1);
 	return Vector3f(1.0f - crs.x() / crs.z() - crs.y() / crs.z(), crs.x() / crs.z(), crs.y() / crs.z());
 }
 
-bool isInTriangle(Vertex_f* pts, Vector4f& P) {
+bool isInTriangle(const Vector4f* pts, const Vector4f& P) {
 	Vector3f baryCor = barycentric(pts, P);
 	if (baryCor.x() < 0 || baryCor.y() < 0 || baryCor.z() < 0)
 		return false;  // 点在三角形外
@@ -71,104 +71,123 @@ bool isInTriangle(Vertex_f* pts, Vector4f& P) {
 		return true;
 }
 
-void DrawTriangle(Vertex_f* pts, std::vector<float>& zBuffer, TGAImage& image, const TGAImage& texture) {
+bool isInTriangleByBary(const Vector3f& baryCor) {
+	if (baryCor.x() < 0 || baryCor.y() < 0 || baryCor.z() < 0)
+		return false;  // 点在三角形外
+	else
+		return true;
+}
+
+void DrawTriangle(Vector4f pts[3], std::vector<float>& zBuffer, TGAImage& image, IShader& shader, size_t faceInd)
+{
+	Vector3f PointsZInCCS(pts[0].w(), pts[1].w(), pts[2].w()); // 记录点在摄像机坐标系中的Z值, 用于矫正透视投影不正确
+	for (size_t i = 0; i < 3; i++)
+	{
+		pts[i] /= pts[i].w();
+	}
+	Vector3f PointsZInFinal(pts[0].z(), pts[1].z(), pts[2].z()); // 点在最终的坐标系中的z值
 	// 找到bounding box 大小
 	Vector2f boundingBoxMin(image.get_width() - 1, image.get_height() - 1);
 	Vector2f boundingBoxMax(0, 0);
 	Vector2f clamp(image.get_width() - 1, image.get_height() - 1);
 	for (int i = 0; i < 3; ++i) {
-		boundingBoxMax.x() = std::min(clamp.x(), std::max(boundingBoxMax.x(), std::ceil(pts[i].position.x())));
-		boundingBoxMax.y() = std::min(clamp.x(), std::max(boundingBoxMax.y(), std::ceil(pts[i].position.y())));
-		boundingBoxMin.x() = std::max(0.f, std::min(boundingBoxMin.x(), std::floor(pts[i].position.x())));
-		boundingBoxMin.y() = std::max(0.f, std::min(boundingBoxMin.y(), std::floor(pts[i].position.y())));
+		boundingBoxMax.x() = std::min(clamp.x(), std::max(boundingBoxMax.x(), std::ceil(pts[i].x())));
+		boundingBoxMax.y() = std::min(clamp.x(), std::max(boundingBoxMax.y(), std::ceil(pts[i].y())));
+		boundingBoxMin.x() = std::max(0.f, std::min(boundingBoxMin.x(), std::floor(pts[i].x())));
+		boundingBoxMin.y() = std::max(0.f, std::min(boundingBoxMin.y(), std::floor(pts[i].y())));
 	}
-
-	Vector3f PointsZ(pts[0].position.w(), pts[1].position.w(), pts[2].position.w());
-	Vector2f PointsUV[3]{ pts[0].DiffuseCoord, pts[1].DiffuseCoord, pts[2].DiffuseCoord };
 	// 遍历bounding box的点
 	Vector4f Point;
 	for (Point.x() = boundingBoxMin.x(); Point.x() <= boundingBoxMax.x(); ++Point.x()) {
 		for (Point.y() = boundingBoxMin.y(); Point.y() <= boundingBoxMax.y(); ++Point.y()) {
-			if (!isInTriangle(pts, Point))
+			Vector3f baryCor = barycentric(pts, Point);
+			if (!isInTriangleByBary(baryCor))
 				continue;  // 点在三角形外
 			// z插值
-			Vector3f baryCor = barycentric(pts, Point);
-			Point.z() = InterpolateDepth(baryCor, PointsZ);
+			Point.z() = InterpolateDepth(baryCor, PointsZInFinal);
+			float zInCCS = InterpolateDepth(baryCor, PointsZInCCS);
 			int zBufferInd = static_cast<int>(Point.x()) + static_cast<int>(Point.y()) * width;
-			if (Point.z() > zBuffer[zBufferInd]) {
-				zBuffer[zBufferInd] = Point.z();
-				// UV插值
-				Vector2f interpolateUV = interpolateVarings(PointsUV, baryCor, PointsZ);
-				image.set(Point.x(), Point.y(), texture.get(interpolateUV[0] * texture.get_width(), (1 - interpolateUV[1]) * texture.get_height()));
+			if (zInCCS > zBuffer[zBufferInd]) {
+				zBuffer[zBufferInd] = zInCCS;
+				TGAColor color;
+				if (!shader.fragment(baryCor, color, PointsZInCCS, faceInd))
+					image.set(Point.x(), Point.y(), color);
 			}
 		}
 	}
 }
 
-void DrawTriangle_MSAA(Vertex_f* pts, std::vector<float>& zBuffer, std::vector<Vector4f>& colorBuffer, TGAImage& image, const TGAImage& texture, size_t MSAAX) {
-	if (MSAAX > 4)
-	{
-		"Error: MSAAX is more than 4. The program will fixed it to 4.";
-		MSAAX = 4;
-	}
-	// 找到bounding box 大小
-	Vector2f boundingBoxMin(image.get_width() - 1, image.get_height() - 1);
-	Vector2f boundingBoxMax(0, 0);
-	Vector2f clamp(image.get_width() - 1, image.get_height() - 1);
-	for (int i = 0; i < 3; ++i) {
-		boundingBoxMax.x() = std::min(clamp.x(), std::max(boundingBoxMax.x(), std::ceil(pts[i].position.x())));
-		boundingBoxMax.y() = std::min(clamp.x(), std::max(boundingBoxMax.y(), std::ceil(pts[i].position.y())));
-		boundingBoxMin.x() = std::max(0.f, std::min(boundingBoxMin.x(), std::floor(pts[i].position.x())));
-		boundingBoxMin.y() = std::max(0.f, std::min(boundingBoxMin.y(), std::floor(pts[i].position.y())));
-	}
-	// 初始化三个顶点的属性数组
-	Vector3f PointsZ(pts[0].position.w(), pts[1].position.w(), pts[2].position.w());
-	Vector2f PointsUV[3]{ pts[0].DiffuseCoord, pts[1].DiffuseCoord, pts[2].DiffuseCoord };
-	// 遍历bounding box的点
-	Vector4f Point;
-	size_t MSAAX_square = MSAAX * MSAAX;
-	const float fillUnitValue = 1.0f / MSAAX_square;
-	for (Point.x() = boundingBoxMin.x(); Point.x() <= boundingBoxMax.x(); ++Point.x()) {
-		for (Point.y() = boundingBoxMin.y(); Point.y() <= boundingBoxMax.y(); ++Point.y()) {
-			std::vector<Vector4f> MSAAPoint(MSAAX_square); // MSAAPoint中每一个向量的第4个值代表是否在三角形内部，1.0f代表是，0.0f代表否
-			float fillValue = .0f;
-			for (size_t k = 0; k < MSAAX_square; ++k) {
-				size_t xk = k % MSAAX, yk = k / MSAAX;
-				MSAAPoint[k].x() = Point.x()  + (0.5f + xk) / MSAAX;
-				MSAAPoint[k].y() = Point.y()  + (0.5f + yk) / MSAAX;
-				if (isInTriangle(pts, MSAAPoint[k])) {
-					fillValue += fillUnitValue;
-					MSAAPoint[k].w() = 1.0f;
-				}
-				else
-					MSAAPoint[k].w() = 0.0f;
-			}
-			if (fillValue < fillUnitValue)
-				continue;
-			// 对每个在三角形内的子采样点，更新zBuffer
-			for (size_t k = 0; k < MSAAX_square; k++)
-			{
-				if (MSAAPoint[k].w() == 0.0f)
-					continue;
-				Vector3f baryCor = barycentric(pts, MSAAPoint[k]);
-				MSAAPoint[k].z() = InterpolateDepth(baryCor, PointsZ);  // 插值得到像素点对应在空间中的z（透视投影矫正）
-				int BufferInd = (static_cast<int>(Point.x()) + static_cast<int>(Point.y()) * width) * MSAAX_square + k;
-				if (MSAAPoint[k].z() > zBuffer[BufferInd]) {
-					zBuffer[BufferInd] = MSAAPoint[k].z();
-					// uv插值(透视投影矫正)
-					Vector2f interpolateUV = interpolateVarings(PointsUV, baryCor, PointsZ);
-					colorBuffer[BufferInd] = texture.get(interpolateUV[0] * texture.get_width(), (1 - interpolateUV[1]) * texture.get_height()).Color2Vec4f();
-				}
-			}
-			Vector4f blendColorVec(0, 0, 0, 0);
-			for (size_t k = 0; k < MSAAX_square; k++) {
-				int BufferInd = (static_cast<int>(Point.x()) + static_cast<int>(Point.y()) * width) * MSAAX_square + k;
-				blendColorVec += colorBuffer[BufferInd];
-			}
-			image.set(static_cast<int>(Point.x()), static_cast<int>(Point.y()), TGAColor(blendColorVec * fillUnitValue));
-		}
-	}
+//void DrawTriangle_MSAA(Vertex_f* pts, std::vector<float>& zBuffer, std::vector<Vector4f>& colorBuffer, TGAImage& image, const TGAImage& texture, size_t MSAAX) {
+//	if (MSAAX > 4)
+//	{
+//		"Error: MSAAX is more than 4. The program will fixed it to 4.";
+//		MSAAX = 4;
+//	}
+//	// 找到bounding box 大小
+//	Vector2f boundingBoxMin(image.get_width() - 1, image.get_height() - 1);
+//	Vector2f boundingBoxMax(0, 0);
+//	Vector2f clamp(image.get_width() - 1, image.get_height() - 1);
+//	for (int i = 0; i < 3; ++i) {
+//		boundingBoxMax.x() = std::min(clamp.x(), std::max(boundingBoxMax.x(), std::ceil(pts[i].position.x())));
+//		boundingBoxMax.y() = std::min(clamp.x(), std::max(boundingBoxMax.y(), std::ceil(pts[i].position.y())));
+//		boundingBoxMin.x() = std::max(0.f, std::min(boundingBoxMin.x(), std::floor(pts[i].position.x())));
+//		boundingBoxMin.y() = std::max(0.f, std::min(boundingBoxMin.y(), std::floor(pts[i].position.y())));
+//	}
+//	// 初始化三个顶点的属性数组
+//	Vector3f PointsZ(pts[0].position.w(), pts[1].position.w(), pts[2].position.w());
+//	Vector2f PointsUV[3]{ pts[0].uv, pts[1].uv, pts[2].uv };
+//	// 遍历bounding box的点
+//	Vector4f Point;
+//	size_t MSAAX_square = MSAAX * MSAAX;
+//	const float fillUnitValue = 1.0f / MSAAX_square;
+//	for (Point.x() = boundingBoxMin.x(); Point.x() <= boundingBoxMax.x(); ++Point.x()) {
+//		for (Point.y() = boundingBoxMin.y(); Point.y() <= boundingBoxMax.y(); ++Point.y()) {
+//			std::vector<Vector4f> MSAAPoint(MSAAX_square); // MSAAPoint中每一个向量的第4个值代表是否在三角形内部，1.0f代表是，0.0f代表否
+//			float fillValue = .0f;
+//			for (size_t k = 0; k < MSAAX_square; ++k) {
+//				size_t xk = k % MSAAX, yk = k / MSAAX;
+//				MSAAPoint[k].x() = Point.x()  + (0.5f + xk) / MSAAX;
+//				MSAAPoint[k].y() = Point.y()  + (0.5f + yk) / MSAAX;
+//				if (isInTriangle(pts, MSAAPoint[k])) {
+//					fillValue += fillUnitValue;
+//					MSAAPoint[k].w() = 1.0f;
+//				}
+//				else
+//					MSAAPoint[k].w() = 0.0f;
+//			}
+//			if (fillValue < fillUnitValue)
+//				continue;
+//			// 对每个在三角形内的子采样点，更新zBuffer
+//			for (size_t k = 0; k < MSAAX_square; k++)
+//			{
+//				if (MSAAPoint[k].w() == 0.0f)
+//					continue;
+//				Vector3f baryCor = barycentric(pts, MSAAPoint[k]);
+//				MSAAPoint[k].z() = InterpolateDepth(baryCor, PointsZ);  // 插值得到像素点对应在空间中的z（透视投影矫正）
+//				int BufferInd = (static_cast<int>(Point.x()) + static_cast<int>(Point.y()) * width) * MSAAX_square + k;
+//				if (MSAAPoint[k].z() > zBuffer[BufferInd]) {
+//					zBuffer[BufferInd] = MSAAPoint[k].z();
+//					// uv插值(透视投影矫正)
+//					Vector2f interpolateUV = interpolateVarings(PointsUV, baryCor, PointsZ);
+//					colorBuffer[BufferInd] = BilinearInterpolate(texture, interpolateUV[0], interpolateUV[1]);
+//				}
+//			}
+//			Vector4f blendColorVec(0, 0, 0, 0);
+//			for (size_t k = 0; k < MSAAX_square; k++) {
+//				int BufferInd = (static_cast<int>(Point.x()) + static_cast<int>(Point.y()) * width) * MSAAX_square + k;
+//				blendColorVec += colorBuffer[BufferInd];
+//			}
+//			image.set(static_cast<int>(Point.x()), static_cast<int>(Point.y()), TGAColor(blendColorVec * fillUnitValue));
+//		}
+//	}
+//}
+
+static Vector4f Lerp(const Vector4f& vec0, const Vector4f& vec1, float t) {
+	return vec0 + t * (vec1 - vec0);
 }
+
+
+
 
 static float InterpolateDepth(const Vector3f& weights, const Vector3f& depths) {
 	return weights.dot(depths);
