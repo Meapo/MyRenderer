@@ -55,7 +55,7 @@ public:
 		Vector2f interpolateUV = interpolateVarings(_varying_uv, baryCor, z);
 		Vector3f normal(Vec4f2Vec3f(_uniform_MIT * model->getTextureNormal(model->face(faceInd)[5], interpolateUV)));
 		normal.normalize();
-		Vector3f light(1, 1, 0);
+		Vector3f light(2, 2, 1);
 		light.normalize();
 		float intensity = std::max(.0f, normal.dot(light));
 		color = TGAColor(model->getTextureColor(model->face(faceInd)[4], interpolateUV) * intensity);
