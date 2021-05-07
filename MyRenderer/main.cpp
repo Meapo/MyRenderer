@@ -35,8 +35,8 @@ int main(int argc, char** argv) {
 		lFileName = argv[2];
 	}
 	else {
-		path = "obj/slark/";
-		lFileName = "slark_econ.fbx";
+		path = "obj/morphling/";
+		lFileName = "morphling_econ.fbx";
 	}
 	model = new Model(path, lFileName);
 	// set image's width/height/colortype
