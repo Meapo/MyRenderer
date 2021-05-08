@@ -12,5 +12,5 @@ Matrix3f BlinnShader::get_InverseTBNMatrix(const Vector3f& normal) {
 	i.normalize(); j.normalize();
 	Matrix3f B;
 	B << i, j, normal;
-	return B;
+	return B.inverse();
 }

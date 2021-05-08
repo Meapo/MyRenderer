@@ -25,6 +25,7 @@ Matrix4f ModelView;
 Matrix4f Projection;
 Matrix4f Viewport;
 
+Vector4f LightDir(1.0f, 1.0f, 1.0f, .0f);
 
 int main(int argc, char** argv) {
 	const char* lFileName;

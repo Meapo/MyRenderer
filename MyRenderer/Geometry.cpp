@@ -1,5 +1,15 @@
 #include "Geometry.h"
 
+void DrawWireFrame(Vector4f ScreenCor[3], TGAImage& image, const TGAColor& color) {
+	for (size_t i = 0; i < 3; i++)
+	{
+		ScreenCor[i] /= ScreenCor[i].w();
+	}
+	DrawLine(ScreenCor[0].x(), ScreenCor[0].y(), ScreenCor[1].x(), ScreenCor[1].y(), image, color);
+	DrawLine(ScreenCor[1].x(), ScreenCor[1].y(), ScreenCor[2].x(), ScreenCor[2].y(), image, color);
+	DrawLine(ScreenCor[2].x(), ScreenCor[2].y(), ScreenCor[0].x(), ScreenCor[0].y(), image, color);
+}
+
 void DrawLine(int x0, int y0, int x1, int y1, TGAImage& image, const TGAColor& color) {
 	bool steep = false;
 	if (std::abs(x1 - x0) < std::abs(y1 - y0)) {

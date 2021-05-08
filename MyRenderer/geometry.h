@@ -10,6 +10,8 @@ extern const int width;
 
 using namespace Eigen;
 
+void DrawWireFrame(Vector4f ScreenCor[3], TGAImage& image, const TGAColor& color);
+
 void DrawLine(int x0, int y0, int x1, int y1, TGAImage& image, const TGAColor& color);
 
 Vector3f barycentric(const Vertex_f* pts, const Vector4f& P);
