@@ -80,10 +80,10 @@ public:
 		Matrix3f inverseTBN = get_InverseTBNMatrix(interpolateNorm);
 		Vector3f normal(Vec4f2Vec3f(model->getTextureNormal(model->face(faceInd)[5], interpolateUV)));
 		// normal = (inverseTBN.transpose() * normal).normalized();
-		float Ambient = 0.05f;
+		float Ambient = 0.0f;
 		float Diffuse = std::max(.0f, normal.dot(_light));
 		float Specular = std::max(.0f, std::powf(normal.dot((_light - interpolateCor).normalized()), 150));
-		float intensity = Ambient + Diffuse + Specular;
+		float intensity = Ambient + Diffuse + 0.5f * Specular;
 
 		TGAColor c = model->getTextureColor(model->face(faceInd)[4], interpolateUV);
 		for (int i = 0; i < 3; i++)

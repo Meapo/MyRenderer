@@ -638,7 +638,10 @@ Model::Model(const char* path, const char *filename) : verts_(), faces_(), bBox(
 }
 
 Model::~Model() {
-
+    for (auto it = textures_.begin(); it != textures_.end(); it++)
+    {
+        delete it->second;
+    }
 }
 
 int Model::nverts() {

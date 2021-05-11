@@ -80,7 +80,8 @@ int main(int argc, char** argv) {
 		DrawTriangle(ScreenCor, zBuffer, image, shader, i);
 	}
 	
-
+	delete model;
+	model = nullptr;
 	//image.flip_vertically(); // i want to have the origin at the left bottom corner of the image
 	// write output
 	image.write_tga_file("output.tga");
