@@ -1,23 +1,11 @@
-#ifndef __MODEL_H__
-#define __MODEL_H__
+#pragma once
 
 #include <vector>
 #include <unordered_map>
-#include <Eigen>
 #include <fbxsdk.h>
 #include "tgaimage.h"
 #include "Material.h"
-
-using namespace Eigen;
-
-struct Vertex_f
-{
-	Vector4f position;
-	Vector2f uv;
-	Vector4f normal;
-	Vector4f tangent;
-};
-
+#include "Mesh.h";
 
 class Model {
 private:
@@ -54,10 +42,9 @@ public:
 	const Vector4f& MaxBBox();
 	const Vector4f const getTextureColor(size_t texInd, const Vector2f& uv);
 	const Vector4f const getTextureNormal(size_t texInd, const Vector2f& uv);
-	const Material& getMaterial(size_t);
+	Material& getMaterial(size_t);
 	const std::string& modelFilePath() { return modelFilePath_; }
 };
 
 static Vector4f Lerp(const Vector4f& vec0, const Vector4f& vec1, float t);
 
-#endif //__MODEL_H__

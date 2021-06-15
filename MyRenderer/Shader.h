@@ -64,7 +64,7 @@ public:
 	Matrix4f& uniform_MIT() { return _uniform_MIT; }
 	virtual Vector4f vertex(size_t faceInd, size_t vertInFace) {
 		const Vertex_f& vertex = model->vert(faceInd, vertInFace);
-		_varying_uv[vertInFace] = vertex.uv;
+		_varying_uv[vertInFace] = vertex.texCoords;
 		_varying_norm[vertInFace] = vertex.normal;
 		Vector4f vertexCor = vertex.position;
 		Vector4f clipCor = ModelView * vertexCor;
@@ -79,15 +79,16 @@ public:
 		interpolateNorm.normalize(); 
 		Matrix3f inverseTBN = get_InverseTBNMatrix(interpolateNorm);
 		Vector3f normal(Vec4f2Vec3f(model->getTextureNormal(model->face(faceInd)[5], interpolateUV)));
-		// normal = (inverseTBN.transpose() * normal).normalized();
-		float Ambient = 0.0f;
-		float Diffuse = std::max(.0f, normal.dot(_light));
-		float Specular = std::max(.0f, std::powf(normal.dot((_light - interpolateCor).normalized()), 150));
-		float intensity = Ambient + Diffuse + 0.5f * Specular;
+	    normal =  normal.normalized();
+		const float Shininess = model->getMaterial(model->face(faceInd)[3]).Shininess();
+		Vector3f Ambient = model->getMaterial(model->face(faceInd)[3]).Ambient();
+		Vector3f Diffuse = model->getMaterial(model->face(faceInd)[3]).Diffuse() * std::max(.0f, normal.dot(_light));
+		Vector3f Specular = model->getMaterial(model->face(faceInd)[3]).Specular() * std::max(.0f, std::powf(normal.dot((_light - interpolateCor).normalized()), Shininess));
+		Vector3f light = Ambient + Diffuse + Specular;
 
 		TGAColor c = model->getTextureColor(model->face(faceInd)[4], interpolateUV);
 		for (int i = 0; i < 3; i++)
-			color[i] = std::min<int>(c[i] * intensity, 255); // (a bit of ambient light, diff + spec), clamp the result
+			color[i] = std::min<int>(c[i] * light[i], 255); // (a bit of ambient light, diff + spec), clamp the result
 		color[3] = 255;
 		return false;
 	}

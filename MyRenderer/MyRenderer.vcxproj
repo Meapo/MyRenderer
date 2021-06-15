@@ -166,6 +166,7 @@
     <ClInclude Include="EigenExtension.h" />
     <ClInclude Include="Geometry.h" />
     <ClInclude Include="Material.h" />
+    <ClInclude Include="Mesh.h" />
     <ClInclude Include="model.h" />
     <ClInclude Include="PointLight.h" />
     <ClInclude Include="Shader.h" />

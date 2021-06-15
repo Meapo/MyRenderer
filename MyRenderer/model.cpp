@@ -161,16 +161,16 @@ void Model::ReadUV(FbxMesh* pMesh, const size_t ctrlPointInd, const size_t verte
         {
         case FbxGeometryElement::eDirect :
         {
-            verts_[ctrlPointInd].uv.x() = pVertexUV->GetDirectArray().GetAt(ctrlPointInd)[0];
-            verts_[ctrlPointInd].uv.y() = pVertexUV->GetDirectArray().GetAt(ctrlPointInd)[1];
+            verts_[ctrlPointInd].texCoords.x() = pVertexUV->GetDirectArray().GetAt(ctrlPointInd)[0];
+            verts_[ctrlPointInd].texCoords.y() = pVertexUV->GetDirectArray().GetAt(ctrlPointInd)[1];
         }
         break;
 
         case FbxGeometryElement::eIndexToDirect :
         {
             size_t ind = pVertexUV->GetIndexArray().GetAt(ctrlPointInd);
-            verts_[ctrlPointInd].uv.x() = pVertexUV->GetDirectArray().GetAt(ind)[0];
-            verts_[ctrlPointInd].uv.y() = pVertexUV->GetDirectArray().GetAt(ind)[1];
+            verts_[ctrlPointInd].texCoords.x() = pVertexUV->GetDirectArray().GetAt(ind)[0];
+            verts_[ctrlPointInd].texCoords.y() = pVertexUV->GetDirectArray().GetAt(ind)[1];
         }
         break;
 
@@ -186,15 +186,15 @@ void Model::ReadUV(FbxMesh* pMesh, const size_t ctrlPointInd, const size_t verte
         {
         case FbxGeometryElement::eDirect: 
         {
-            verts_[ctrlPointInd].uv.x() = pVertexUV->GetDirectArray().GetAt(vertexCounter)[0];
-            verts_[ctrlPointInd].uv.y() = pVertexUV->GetDirectArray().GetAt(vertexCounter)[1];
+            verts_[ctrlPointInd].texCoords.x() = pVertexUV->GetDirectArray().GetAt(vertexCounter)[0];
+            verts_[ctrlPointInd].texCoords.y() = pVertexUV->GetDirectArray().GetAt(vertexCounter)[1];
         }
         break;
         case FbxGeometryElement::eIndexToDirect:
         {
             size_t ind = pVertexUV->GetIndexArray().GetAt(vertexCounter);
-            verts_[ctrlPointInd].uv.x() = pVertexUV->GetDirectArray().GetAt(ind)[0];
-            verts_[ctrlPointInd].uv.y() = pVertexUV->GetDirectArray().GetAt(ind)[1];
+            verts_[ctrlPointInd].texCoords.x() = pVertexUV->GetDirectArray().GetAt(ind)[0];
+            verts_[ctrlPointInd].texCoords.y() = pVertexUV->GetDirectArray().GetAt(ind)[1];
         }
         break;
 
@@ -584,7 +584,7 @@ Model::Model(const char* path, const char *filename) : verts_(), faces_(), bBox(
             }
             else if (!line.compare(0, 3, "vt ")) {
                 iss >> trash;
-                for (int i = 0; i < 2; i++) iss >> verts_[texCoordInd].uv[i];
+                for (int i = 0; i < 2; i++) iss >> verts_[texCoordInd].texCoords[i];
                 float fTrash;
                 iss >> fTrash;
                 texCoordInd++;
@@ -677,30 +677,30 @@ const Vector4f& Model::MaxBBox() {
 const Vector4f const Model::getTextureColor(size_t texInd, const Vector2f& _UV) {
     const TGAImage* texture = textures_[texInd];
     float x = _UV[0] * texture->get_width(), y = (1 - _UV[1]) * texture->get_height();
-    //Vector2i uv[4];
-    //uv[0] = { std::floor(x - .5f), std::floor(y - .5f) };
-    //uv[1] = { uv[0].x(), uv[0].y() + 1 };
-    //uv[2] = { uv[0].x() + 1, uv[0].y() + 1 };
-    //uv[3] = { uv[0].x() + 1, uv[0].y() };
-    //if (uv[0].x() >= 0 && uv[0].x() < (texture->get_width() - 1) && uv[0].y() >= 0 && uv[0].y() < (texture->get_height() - 1)) {
-    //    // 在边界内使用bilinnear
-    //    Vector4f color[4];
-    //    for (size_t i = 0; i < 4; i++)
-    //    {
-    //        color[i] = texture->get(uv[i].x(), uv[i].y()).Color2Vec4f();
-    //    }
-    //    float t = x - uv[0].x() - .5f;
-    //    Vector4f colorLerp0 = Lerp(color[0], color[3], t);
-    //    Vector4f colorLerp1 = Lerp(color[1], color[2], t);
-    //    float s = y - uv[0].y() - .5f;
-    //    Vector4f result = Lerp(colorLerp0, colorLerp1, s);
-    //    return result;
-    //}
-    //else {
-        // 在边界外使用最近的点
+    Vector2i uv[4];
+    uv[0] = { std::floor(x - .5f), std::floor(y - .5f) };
+    uv[1] = { uv[0].x(), uv[0].y() + 1 };
+    uv[2] = { uv[0].x() + 1, uv[0].y() + 1 };
+    uv[3] = { uv[0].x() + 1, uv[0].y() };
+    if (uv[0].x() >= 0 && uv[0].x() < (texture->get_width() - 1) && uv[0].y() >= 0 && uv[0].y() < (texture->get_height() - 1)) {
+        // 在边界内使用bilinnear
+        Vector4f color[4];
+        for (size_t i = 0; i < 4; i++)
+        {
+            color[i] = texture->get(uv[i].x(), uv[i].y()).Color2Vec4f();
+        }
+        float t = x - uv[0].x() - .5f;
+        Vector4f colorLerp0 = Lerp(color[0], color[3], t);
+        Vector4f colorLerp1 = Lerp(color[1], color[2], t);
+        float s = y - uv[0].y() - .5f;
+        Vector4f result = Lerp(colorLerp0, colorLerp1, s);
+        return result;
+    }
+    else {
+        //在边界外使用最近的点
         Vector4f color = texture->get(std::round(x), std::round(y)).Color2Vec4f();
         return color;
-    // }
+     }
 }
 
 const Vector4f const Model::getTextureNormal(size_t texInd, const Vector2f& _UV) {
@@ -717,7 +717,7 @@ const Vector4f const Model::getTextureNormal(size_t texInd, const Vector2f& _UV)
 }
 
 
-const Material& Model::getMaterial(size_t ind) {
+Material& Model::getMaterial(size_t ind) {
     return materials_[ind];
 }
 
