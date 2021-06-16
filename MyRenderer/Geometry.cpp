@@ -1,5 +1,5 @@
 #include "Geometry.h"
-
+#include <iostream>
 void DrawWireFrame(Vector4f ScreenCor[3], TGAImage& image, const TGAColor& color) {
 	for (size_t i = 0; i < 3; i++)
 	{
@@ -102,7 +102,7 @@ void DrawTriangle(Vector4f pts[3], std::vector<float>& zBuffer, TGAImage& image,
 	Vector2f clamp(image.get_width() - 1, image.get_height() - 1);
 	for (int i = 0; i < 3; ++i) {
 		boundingBoxMax.x() = std::min(clamp.x(), std::max(boundingBoxMax.x(), std::ceil(pts[i].x())));
-		boundingBoxMax.y() = std::min(clamp.x(), std::max(boundingBoxMax.y(), std::ceil(pts[i].y())));
+		boundingBoxMax.y() = std::min(clamp.y(), std::max(boundingBoxMax.y(), std::ceil(pts[i].y())));
 		boundingBoxMin.x() = std::max(0.f, std::min(boundingBoxMin.x(), std::floor(pts[i].x())));
 		boundingBoxMin.y() = std::max(0.f, std::min(boundingBoxMin.y(), std::floor(pts[i].y())));
 	}
@@ -120,7 +120,7 @@ void DrawTriangle(Vector4f pts[3], std::vector<float>& zBuffer, TGAImage& image,
 			if (zInCCS > zBuffer[zBufferInd]) {
 				zBuffer[zBufferInd] = zInCCS;
 				TGAColor color;
-				if (!shader.fragment(baryCor, color, PointsZInCCS, faceInd))
+				if (!shader.fragment(baryCor, color, PointsZInCCS))
 					image.set(Point.x(), Point.y(), color);
 			}
 		}
@@ -200,6 +200,7 @@ static Vector4f Lerp(const Vector4f& vec0, const Vector4f& vec1, float t) {
 
 
 static float InterpolateDepth(const Vector3f& weights, const Vector3f& depths) {
-	return weights.dot(depths);
+	Vector3f vec(1 / depths.x(), 1 / depths.y(), 1 / depths.z());
+	return 1 / weights.dot(vec);
 }
 

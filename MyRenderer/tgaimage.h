@@ -64,9 +64,18 @@ struct TGAColor {
 		return result;
 	}
 
-	Vector4f Color2Vec4f() {
+	Vector4f Color2Vec4f() const {
 		Vector4f res;
 		for (size_t i = 0; i < 4; i++)
+		{
+			res[i] = bgra[i];
+		}
+		return res;
+	}
+
+	Vector3f Color2Vec3f() const {
+		Vector3f res;
+		for (size_t i = 0; i < 3; i++)
 		{
 			res[i] = bgra[i];
 		}

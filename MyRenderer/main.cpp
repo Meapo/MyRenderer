@@ -18,6 +18,7 @@ const TGAColor white = TGAColor(255, 255, 255, 255);
 const TGAColor red   = TGAColor(255, 0,   0,   255);
 const TGAColor black = TGAColor(0, 0, 0, 255);
 Model* model = nullptr;
+Mesh* mesh = nullptr;
 const int height = 800;
 const int width = 800;
 
@@ -25,7 +26,7 @@ Matrix4f ModelView;
 Matrix4f Projection;
 Matrix4f Viewport;
 
-Vector4f LightDir(1.0f, 1.0f, 1.0f, .0f);
+Vector4f LightDir(1.0f, -0.7f, -1.0f, .0f);
 
 int main(int argc, char** argv) {
 	const char* lFileName;
@@ -36,13 +37,13 @@ int main(int argc, char** argv) {
 		lFileName = argv[2];
 	}
 	else {
-		path = "obj/morphling/";
-		lFileName = "morphling_econ.fbx";
+		path = "obj/slark/";
+		lFileName = "slark_econ.fbx";
 	}
 	model = new Model(path, lFileName);
 	// set image's width/height/colortype
 	TGAImage image(width, height, TGAImage::RGB);
-
+	TGAImage depthImage(width, height, TGAImage::RGB);
 	
 	// std::vector<float> zBuffer(width * height, std::numeric_limits<float>::min());
 	std::vector<float> zBuffer(width * height, -std::numeric_limits<float>::max());  // 注意：上面注释部分得到的值是正数中float的最小值！
@@ -64,28 +65,36 @@ int main(int argc, char** argv) {
 	// MVP + 视口变换
 	Viewport = get_ViewportMatrix(width, height);
 
-	std::vector<Vector4f> afterTransPoints(model->nfaces()); // afterTransPoints的w代表插值
-
 	// shader
 	BlinnShader shader;
 	shader.uniform_M() = ModelView;
 	// 参考《fundamentals of computer graphics》的6.2.2节,讲述了法向量在进行坐标变换时为什么不是乘以ModelView，而是其逆矩阵的转置
 	shader.uniform_MIT() = ModelView.inverse().transpose(); 
 
-	for (int i = 0; i < model->nfaces(); ++i) {
-		Vector4f ScreenCor[3];
-		for (int j = 0; j < 3; ++j) {
-			ScreenCor[j] = shader.vertex(i, j);
+	for (size_t meshInd = 0; meshInd < model->meshes().size(); ++meshInd) {
+		mesh = &model->meshes()[meshInd];
+		for (size_t faceInd = 0; faceInd < mesh->nfaces(); faceInd++)
+		{
+			Vector4f ScreenCor[3];
+			for (int vertInd = 0; vertInd < 3; ++vertInd) {
+				ScreenCor[vertInd] = shader.vertex(faceInd, vertInd);
+			}
+			DrawTriangle(ScreenCor, zBuffer, image, shader, faceInd);
 		}
-		DrawTriangle(ScreenCor, zBuffer, image, shader, i);
 	}
 	
+	for (size_t i = 0; i < zBuffer.size(); i++)
+	{
+		int x = i % width, y = i / width;
+		float gray = 1.0f - zBuffer[i] / (zFar - zNear);
+		depthImage.set(x, y, TGAColor(255.0f * gray, 255.0f * gray, 255.0f * gray, 255));
+	}
+
 	delete model;
 	model = nullptr;
-	//image.flip_vertically(); // i want to have the origin at the left bottom corner of the image
 	// write output
 	image.write_tga_file("output.tga");
-
+	depthImage.write_tga_file("depthImage.tga");
 	return 0;
 }
 
